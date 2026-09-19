@@ -22,17 +22,33 @@
     notes: '',
   };
 
+  let filterMillId = '';
+  let filterFrom = '';
+  let filterTo = '';
+
   async function load() {
     error = '';
     try {
+      const params = new URLSearchParams();
+      if (filterMillId) params.set('millId', filterMillId);
+      if (filterFrom) params.set('from', filterFrom);
+      if (filterTo) params.set('to', filterTo);
+      const qs = params.toString();
       [rows, mills] = await Promise.all([
-        api<ViscositySample[]>('/viscosity-samples'),
+        api<ViscositySample[]>(`/viscosity-samples${qs ? `?${qs}` : ''}`),
         api<Mill[]>('/mills'),
       ]);
       if (!form.millId && mills[0]) form.millId = String(mills[0].id);
     } catch (e) {
       error = e instanceof Error ? e.message : '加载失败';
     }
+  }
+
+  function resetFilters() {
+    filterMillId = '';
+    filterFrom = '';
+    filterTo = '';
+    load();
   }
 
   onMount(load);
@@ -137,6 +153,28 @@
     {#if editingId}
       <button class="btn-ghost" on:click={reset}>取消</button>
     {/if}
+  </div>
+</section>
+
+<section class="panel">
+  <h2>筛选</h2>
+  <div class="fields">
+    <div class="field">
+      <label>研磨机
+        <select bind:value={filterMillId}>
+          <option value="">全部</option>
+          {#each mills as m}
+            <option value={String(m.id)}>{m.millCode} (#{m.id})</option>
+          {/each}
+        </select>
+      </label>
+    </div>
+    <div class="field"><label>起始时间<input type="datetime-local" bind:value={filterFrom} /></label></div>
+    <div class="field"><label>截止时间<input type="datetime-local" bind:value={filterTo} /></label></div>
+  </div>
+  <div class="actions">
+    <button class="btn-primary" on:click={load}>查询</button>
+    <button class="btn-ghost" on:click={resetFilters}>重置</button>
   </div>
 </section>
 
