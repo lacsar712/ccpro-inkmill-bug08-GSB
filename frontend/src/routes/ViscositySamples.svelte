@@ -8,6 +8,8 @@
   let error = '';
   let editingId: number | null = null;
 
+  let filter = { millId: '', from: '', to: '' };
+
   function nowLocal(): string {
     const d = new Date();
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -24,15 +26,29 @@
 
   async function load() {
     error = '';
+    const params = new URLSearchParams();
+    if (filter.millId) params.set('millId', filter.millId);
+    if (filter.from) params.set('from', filter.from);
+    if (filter.to) params.set('to', filter.to);
+    const qs = params.toString();
     try {
       [rows, mills] = await Promise.all([
-        api<ViscositySample[]>('/viscosity-samples'),
+        api<ViscositySample[]>(`/viscosity-samples${qs ? `?${qs}` : ''}`),
         api<Mill[]>('/mills'),
       ]);
       if (!form.millId && mills[0]) form.millId = String(mills[0].id);
     } catch (e) {
       error = e instanceof Error ? e.message : '加载失败';
     }
+  }
+
+  function applyFilter() {
+    load();
+  }
+
+  function resetFilter() {
+    filter = { millId: '', from: '', to: '' };
+    load();
   }
 
   onMount(load);
@@ -137,6 +153,28 @@
     {#if editingId}
       <button class="btn-ghost" on:click={reset}>取消</button>
     {/if}
+  </div>
+</section>
+
+<section class="panel">
+  <h2>筛选</h2>
+  <div class="fields">
+    <div class="field">
+      <label>研磨机
+        <select bind:value={filter.millId}>
+          <option value="">全部机台</option>
+          {#each mills as m}
+            <option value={String(m.id)}>{m.millCode} (#{m.id})</option>
+          {/each}
+        </select>
+      </label>
+    </div>
+    <div class="field"><label>起始时间<input type="datetime-local" bind:value={filter.from} /></label></div>
+    <div class="field"><label>结束时间<input type="datetime-local" bind:value={filter.to} /></label></div>
+  </div>
+  <div class="actions">
+    <button class="btn-primary" on:click={applyFilter}>查询</button>
+    <button class="btn-ghost" on:click={resetFilter}>重置</button>
   </div>
 </section>
 

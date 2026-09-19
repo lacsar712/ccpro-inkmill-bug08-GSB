@@ -41,31 +41,32 @@ def list_samples():
     db = SessionLocal()
     try:
         q = db.query(ViscositySample)
-        mill_id = request.args.get("mill_id")
-        mill_code = request.args.get("millId")
-        if mill_id:
-            q = q.filter(ViscositySample.mill_id == int(mill_id))
-        elif mill_code:
-            mill = db.query(Mill).filter(Mill.mill_code == str(mill_code)).first()
-            if mill:
-                q = q.filter(ViscositySample.mill_id == mill.id)
-            else:
-                try:
-                    q = q.filter(ViscositySample.mill_id == int(mill_code))
-                except ValueError:
-                    q = q.filter(ViscositySample.mill_id == -1)
+
+        # millId 严格按机台主键过滤，绝不按 mill_code 匹配（机台编码可能跨车间重复）
+        raw_mill_id = request.args.get("millId") or request.args.get("mill_id")
+        if raw_mill_id is not None and str(raw_mill_id).strip() != "":
+            try:
+                mill_pk = int(str(raw_mill_id).strip())
+            except (TypeError, ValueError):
+                return error("研磨机不存在", 400)
+            if mill_pk <= 0 or not db.get(Mill, mill_pk):
+                return error("研磨机不存在", 400)
+            q = q.filter(ViscositySample.mill_id == mill_pk)
 
         raw_from = request.args.get("from")
         raw_to = request.args.get("to")
-        if raw_from:
-            d0 = parse_query_datetime(raw_from)
-            if d0 is not None:
-                q = q.filter(ViscositySample.sampled_at >= d0)
-        if raw_to:
-            d1 = parse_query_datetime(raw_to)
-            if d1 is not None:
-                # comparing datetime column to date often empties or shifts
-                q = q.filter(ViscositySample.sampled_at <= d1)
+        try:
+            d0 = parse_query_datetime(raw_from or "")
+            d1 = parse_query_datetime(raw_to or "", end_of_day=True)
+        except ValueError:
+            return error("时间格式无效，请使用 YYYY-MM-DD 或 YYYY-MM-DDTHH:MM:SS", 400)
+
+        if d0 is not None and d1 is not None and d0 > d1:
+            return error("起始时间不能晚于结束时间", 400)
+        if d0 is not None:
+            q = q.filter(ViscositySample.sampled_at >= d0)
+        if d1 is not None:
+            q = q.filter(ViscositySample.sampled_at <= d1)
 
         rows = q.order_by(ViscositySample.sampled_at.desc(), ViscositySample.id.desc()).all()
         return jsonify([viscosity_sample_json(r) for r in rows])
